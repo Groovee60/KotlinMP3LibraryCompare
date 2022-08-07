@@ -1,0 +1,6 @@
+src/data
+out/production
+out/sample_results
+out/template_results
+out/legacy_folders
+.idea/
