@@ -5,9 +5,12 @@ import java.io.File
 const val rootOld = "/Volumes/Passport Backup Drive/Full Music Catalog"
 const val rootNew = "/Volumes/External OneDrive/OneDrive/Full Music Catalog"
 
+var loggingBandName = false
+var loggingAlbumName = false
+var loggingTrackName = false
+
 fun main() {
 
-    // pass logBandName = true as the second parameter to see progress in the log
     if (!azFolderCompare("_Christmas")) return
     if (!azFolderCompare("_Numeric")) return
     if (!azFolderCompare("A")) return
@@ -34,13 +37,11 @@ fun main() {
     if (!azFolderCompare("V")) return
     if (!azFolderCompare("W")) return
     if (!azFolderCompare("X-Z")) return
+
 }
 
-var loggingBandName = false
-private fun azFolderCompare(folderName: String, logBandName: Boolean = false): Boolean {
+private fun azFolderCompare(folderName: String): Boolean {
 
-    loggingBandName = logBandName
-    println("Procssing folder $folderName...")
     File("$rootOld/$folderName").listFiles()?.let { oldFiles ->
         File("$rootNew/$folderName").listFiles()?.let { newFiles ->
 
@@ -61,6 +62,8 @@ private fun azFolderCompare(folderName: String, logBandName: Boolean = false): B
 private fun compareBandFolders(folderName: String, oldBandPaths: List<String>, newBandPaths: List<String>) : Boolean {
 
     val zippedOldNewBandPaths = oldBandPaths.zip(newBandPaths)
+
+    println("Folder $folderName - ${zippedOldNewBandPaths.size} bands")
 
     zippedOldNewBandPaths.forEach { (a, b) ->
 
@@ -90,7 +93,7 @@ private fun compareBandFolders(folderName: String, oldBandPaths: List<String>, n
         if (!success) return false
     }
 
-    println("Folder $folderName has no unfixable errors in ${oldBandPaths.count()} bands")
+    //println("Folder $folderName has no unfixable errors in ${oldBandPaths.count()} bands")
     return true
 
 }
@@ -99,17 +102,15 @@ private fun compareBand(oldNewPair: Pair<String, String>): Boolean {
 
     val oldBandPath = oldNewPair.first
     val newBandPath = oldNewPair.second
-
-
+    val bandName = oldBandPath.lastSection
+    
     File(oldBandPath).listFiles()?.let { oldAlbumFiles ->
         File(newBandPath).listFiles()?.let { newAlbumFiles ->
-
-            val bandName = oldBandPath.lastSection
 
             val oldAlbumPaths = oldAlbumFiles.sorted().map { it.absolutePath }.filterSysFiles
             val newAlbumPaths = newAlbumFiles.sorted().map { it.absolutePath }.filterSysFiles
 
-            return compareAlbumFolders(bandName, oldAlbumPaths, newAlbumPaths)
+            return compareAlbumFolders(bandName, oldAlbumPaths, newAlbumPaths, isBoxSet = false)
         } ?: run {
             println("ERROR: New Folder $newBandPath is empty")
             return false
@@ -120,11 +121,12 @@ private fun compareBand(oldNewPair: Pair<String, String>): Boolean {
     }
 }
 
-private fun compareAlbumFolders(bandName: String, oldAlbums: List<String>, newAlbums: List<String>): Boolean {
+private fun compareAlbumFolders(bandOrBoxSetName: String, oldAlbums: List<String>, newAlbums: List<String>, isBoxSet: Boolean = false): Boolean {
 
     val zippedOldNewAlbumPaths = oldAlbums.zip(newAlbums)
 
-    if (loggingBandName) println("$bandName (${zippedOldNewAlbumPaths.size})")
+    val boxSetPrefix = if (isBoxSet) "  SUBFOLDER: " else String()
+    if (loggingBandName) println("  $boxSetPrefix$bandOrBoxSetName - ${zippedOldNewAlbumPaths.size} album(s)")
 
     zippedOldNewAlbumPaths.forEach { (a, b) ->
 
@@ -153,20 +155,18 @@ private fun compareAlbumFolders(bandName: String, oldAlbums: List<String>, newAl
     }
 
     for (oldNewPair in zippedOldNewAlbumPaths) {
-        val success = compareTracks(bandName, oldNewPair)
+        val success = compareTracks(bandOrBoxSetName, oldNewPair, isBoxSet)
         if (!success) return false
     }
 
     return true
 }
 
-private fun compareTracks(bandName: String, oldNewPair: Pair<String, String>): Boolean {
+private fun compareTracks(bandOrBoxSetName: String, oldNewPair: Pair<String, String>, isBoxSet: Boolean): Boolean {
 
     val oldAlbumPath = oldNewPair.first
     val newAlbumPath = oldNewPair.second
     val albumName = oldAlbumPath.lastSection
-
-    //println("compareTracks() $bandName / $albumName...")
 
     File(oldAlbumPath).listFiles()?.let { oldTrackFiles ->
         File(newAlbumPath).listFiles()?.let { newTrackFiles ->
@@ -174,12 +174,32 @@ private fun compareTracks(bandName: String, oldNewPair: Pair<String, String>): B
             val oldTracks = oldTrackFiles.sorted().map { it.absolutePath }.filterSysFiles
             val newTracks = newTrackFiles.sorted().map { it.absolutePath }.filterSysFiles
 
+            if (oldTracks.isEmpty()) {
+                val albumName = oldAlbumPath.lastSection
+                println("ERROR (Non-Fatal): $bandOrBoxSetName / $albumName is empty!")
+                return true
+            }
+
+            // Some bands (e.g., Beatles) have sub-folders for box sets
+            // check for this scenario and recursively call back to the album compare method
+            val fileName = oldTracks.first()
+            val testFile = File(fileName)
+            if (testFile.isDirectory) {
+                val boxSetName = oldAlbumPath.lastSection
+                return compareAlbumFolders(boxSetName, oldTracks, newTracks, isBoxSet = true)
+            }
+
+            val extraSpaceForBoxSet = if (isBoxSet) "  " else String()
+            if (loggingAlbumName) println("$extraSpaceForBoxSet    ${oldAlbumPath.lastSection} - ${newTracks.size} track(s)")
+
             val zippedOldNewTrackPaths = oldTracks.zip(newTracks)
 
             zippedOldNewTrackPaths.forEach { (pathOld, pathNew) ->
 
                 var trackOld = pathOld.lastSection
                 var trackNew = pathNew.lastSection
+
+                if (loggingTrackName) println("$extraSpaceForBoxSet      $trackNew")
 
                 if (trackOld.contains(" .mp3") || trackOld.contains("?")) {
                     //println("ERROR (Non-Fatal): Old track name $trackOld in $bandName/$albumName needs to be patched")
@@ -199,22 +219,22 @@ private fun compareTracks(bandName: String, oldNewPair: Pair<String, String>): B
                 }
 
                 if (trackOld != trackNew) {
-                    println("ERROR: $bandName/$albumName has track name discrepancy\n$trackOld\n$trackNew")
+                    println("ERROR: $bandOrBoxSetName/$albumName has track name discrepancy\n$trackOld\n$trackNew")
                     return false
                 }
             }
 
             if (oldTracks.size != newTracks.size) {
-                println("ERROR: $bandName/$albumName has track count discrepancy - old: ${oldTracks.size} new: ${newTracks.size}")
+                println("ERROR: $bandOrBoxSetName/$albumName has track count discrepancy - old: ${oldTracks.size} new: ${newTracks.size}")
                 return false
             }
 
             return true
         } ?: run {
-            println("ERROR in New $bandName/$albumName: no files")
+            println("ERROR in New $bandOrBoxSetName/$albumName: no files")
         }
     } ?: run {
-        println("ERROR in Old $bandName/$albumName: no files")
+        println("ERROR in Old $bandOrBoxSetName/$albumName: no files")
     }
     return false
 }
