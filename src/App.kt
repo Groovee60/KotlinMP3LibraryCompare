@@ -8,7 +8,6 @@ const val rootNew = "/Volumes/External OneDrive/OneDrive/Full Music Catalog"
 fun main() {
 
     // pass logBandName = true as the second parameter to see progress in the log
-    //
     if (!azFolderCompare("_Christmas")) return
     if (!azFolderCompare("_Numeric")) return
     if (!azFolderCompare("A")) return
